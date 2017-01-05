@@ -1,0 +1,131 @@
+#!/bin/bash
+#       Name: dpass - Default Password DB
+#    Version: 1.0 (Release date: 2016-10-01)
+# Written by: pwnEIP
+#   Homepage: https://github.com/pwnEIP/dpass
+## NOTE:
+#   Exit code '0' normal exit
+#   Exit code '1' error exit
+#   Exit code '2' help exit
+#   Exit code '3' update exit
+
+## Special thanks to Searchsploit | Unix-Ninja & g0tmi1k for providing a good model.
+
+
+gitpath="/opt/dpass"
+csvpath="${scriptpath}/dpass.csv"
+
+gitremote="https://github.com/pwnEIP/dpass.git"
+progname="$( basename "$0" )"
+
+## Usage info
+function usage()
+{
+  echo "  Usage: ${progname} term1 [term2] ... [termN]"
+  echo
+  echo " Example: "
+  echo "  ${progname} cisco"
+  echo
+  echo " Options: "
+  echo "   -u, --update             Check for and install updated dpass.csv"
+  exit 2
+}
+
+## Update database check
+function update()
+{
+
+echo update
+exit 3
+
+  dpkg -l dpass 2>/dev/null >/dev/null
+  if [[ "$?" == "0" ]]; then
+    # Update from the repos (e.g. Kali)
+    updatedeb
+  else
+    # Update via git
+    updategit
+  fi
+}
+
+## Update database
+function updatedeb()
+{
+  echo -e '[i] Updating via package management.\n'
+
+  sudo apt update \
+    || echo -e '\n[!] Issue with apt update (Please check network connectivity & apt SourcesList)' 1>&2
+  sudo apt -y install exploitdb \
+      || echo -e '\n[!] Issue with apt install' 1>&2
+
+  echo -e "\n[*] Update finished."
+  exit 6
+}
+
+## Update database (via GIT)
+function updategit()
+{
+  echo -e '[i] Updating via git.\n'
+
+  ## Make sure we are in the correct folder
+  mkdir -p "${gitpath}/"
+  cd "${gitpath}/"
+
+  ## Are we in a git repo?
+  if [[ "$( git rev-parse --is-inside-work-tree )" != "true" ]]; then
+    if [[ "$( ls )" = "" ]]; then
+      # If directory is empty, just clone
+      echo -e '\n[i] Nothing here. Starting fresh...'
+      git clone "${gitremote}" .
+    fi
+  fi
+
+  # Is our git remote added? (aka homebrew)
+  if [[ "$( git remote -v )" != *"${gitremote}"* ]]; then
+    echo -e '\n[i] Missing git remote:' "${gitremote}"
+    git init >/dev/null
+    git remote add origin "${gitremote}" 2>/dev/null
+  fi
+
+  # Make sure to prep checkout first
+  git checkout -- .
+
+  # Update from git
+  git pull origin master
+
+  # If conflicts, clean and try again
+  if [[ "$?" -ne 0 ]]; then
+    git clean -d -fx ""
+    git pull origin master
+  fi
+
+  echo -e "\n[*] Update finished."
+  exit 6
+}
+
+## Check for empty args
+if [[ $# -eq 0 ]]; then
+  usage >&2
+fi
+
+
+## Parse short arguments
+while getopts "u" arg "${ARGS}"; do
+  if [[ "${arg}" = "?" ]]; then
+    usage >&2;
+  fi
+  case ${arg} in
+    u) update;;
+  esac
+  shift $(( OPTIND - 1 ))
+done
+
+## If we cannot find dpass.csv
+if [[ ! -f "${csvpath}" ]]; then
+  echo '[!] Could not find: ' ${csvpath}
+  exit 1
+fi
+
+exit 0
+
+
