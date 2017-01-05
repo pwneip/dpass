@@ -1,43 +1,42 @@
 #!/bin/bash
 #       Name: dpass - Default Password DB
-#    Version: 1.0 (Release date: 2016-10-01)
+#    Version: 1.0 (Release date: 2017-01-01, happy new year, you dirty animals)
 # Written by: pwnEIP
-#   Homepage: https://github.com/pwnEIP/dpass
+#   Homepage: http://pwneip.com
 ## NOTE:
 #   Exit code '0' normal exit
 #   Exit code '1' error exit
 #   Exit code '2' help exit
 #   Exit code '3' update exit
 
-## Special thanks to Searchsploit | Unix-Ninja & g0tmi1k for providing a good model.
-
+## Special thanks to Searchsploit | Unix-Ninja & g0tmi1k for providing a good model and source
 
 gitpath="/opt/dpass"
-csvpath="${scriptpath}/dpass.csv"
+csvpath="${gitpath}/dpass.csv"
 
 gitremote="https://github.com/pwnEIP/dpass.git"
 progname="$( basename "$0" )"
 
+notruncate=0
+
 ## Usage info
 function usage()
 {
-  echo "  Usage: ${progname} term1 [term2] ... [termN]"
+  echo "  Usage: ${progname} [args] term1 [term2] ... [termN]"
   echo
   echo " Example: "
   echo "  ${progname} cisco"
   echo
   echo " Options: "
-  echo "   -u, --update             Check for and install updated dpass.csv"
+  echo "   -h, --help              Show this help screen."
+  echo "   -d,			   Don't truncate"
+  echo "   -u, --update            Check for and install updated dpass.csv"
   exit 2
 }
 
 ## Update database check
 function update()
 {
-
-echo update
-exit 3
-
   dpkg -l dpass 2>/dev/null >/dev/null
   if [[ "$?" == "0" ]]; then
     # Update from the repos (e.g. Kali)
@@ -103,29 +102,54 @@ function updategit()
   exit 6
 }
 
+function notruncate()
+{
+  NOTRUNCATE=1
+}
+
 ## Check for empty args
 if [[ $# -eq 0 ]]; then
   usage >&2
 fi
 
-
 ## Parse short arguments
-while getopts "u" arg "${ARGS}"; do
-  if [[ "${arg}" = "?" ]]; then
-    usage >&2;
-  fi
-  case ${arg} in
-    u) update;;
-  esac
-  shift $(( OPTIND - 1 ))
+while getopts "dhu" arg "$@"; do
+	if [[ "${arg}" = "?" ]]; then
+		usage >&2;
+	fi
+	case ${arg} in
+		h) usage >&2;;
+		d) notruncate;;
+		u) update;;
+	esac
+	shift $(( OPTIND - 1 ))
 done
 
 ## If we cannot find dpass.csv
 if [[ ! -f "${csvpath}" ]]; then
-  echo '[!] Could not find: ' ${csvpath}
-  exit 1
+	echo '[!] Could not find: ' ${csvpath}
+	exit 1
 fi
 
+## Printing dotted lines in the correct manner
+function drawline()
+{
+  printf "%0.s-" $( eval echo {1..$(( COL1 + 1 ))} )
+  echo -n " "
+  printf "%0.s-" $( eval echo {1..$(( COL2 - 1 ))} )
+  echo ""
+}
+COL2=$(( ${#gitpath} + 15 ))
+COL1=$(( $( tput cols ) - COL2 - 1 ))
+
+TERMS=$(echo $@ | tr '[:upper:]' '[:lower:]'| sed 's_/_\\/_g' | tr ' ' '|')
+
+if [[ $NOTRUNCATE ]]; then
+	SEARCH="awk -F '[,]' 'BEGIN {printf \" %-15s | %-25s | %-20s | %s\n\", \"Vendor\", \"Model\", \"Username\", \"Password\";} tolower(\$0) ~ /$TERMS/ {printf \" %-15s | %-25s | %-20s | %s\n\", \$1, \$2, \$4, \$5; count++} END{printf \"\tDisplaying %s of %s passwords\n\", count, FNR}' \"${csvpath}\"";
+else
+	SEARCH="awk -F '[,]' 'BEGIN {printf \" %-15s | %-25s | %-20s | %s\n\", \"Vendor\", \"Model\", \"Username\", \"Password\";} tolower(\$0) ~ /$TERMS/ {printf \" %-15s | %-25s | %-20s | %s\n\", substr(\$1,1,15), substr(\$2,1,25), substr(\$4,1,20), \$5; count++} END{printf \"\tDisplaying %s of %s passwords\n\", count, FNR}' \"${csvpath}\"";
+fi
+
+eval $SEARCH
+
 exit 0
-
-
